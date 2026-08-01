@@ -1,0 +1,50 @@
+import folium
+import json
+import pandas as pd
+from folium.plugins import MarkerCluster
+
+# 1) 시도별 밀도 데이터
+df = pd.read_csv("source/hollys_population_analysis.csv")
+
+with open("source/skorea-provinces-2018-geo.json", encoding="utf-8") as f:
+    geo = json.load(f)
+
+name_fix = {"강원도": "강원특별자치도", "전라북도": "전북특별자치도"}
+for feat in geo["features"]:
+    n = feat["properties"]["name"]
+    feat["properties"]["name"] = name_fix.get(n, n)
+
+# 2) 전국이 보이도록 중심좌표 설정
+m = folium.Map(location=[35.9, 127.8], zoom_start=7)
+
+# 3) 시도별 Choropleth
+folium.Choropleth(
+    geo_data=geo,
+    data=df,
+    columns=["시도", "10만명당_매장수"],
+    key_on="feature.properties.name",
+    fill_color="YlOrRd",        # 누락되어 있던 부분
+    fill_opacity=0.7,
+    line_opacity=0.3,
+    legend_name="10만명당 할리스 매장 수"
+).add_to(m)
+
+# 4) 전국 매장 개별 마커 (위경도 있는 매장 전체)
+df_store = pd.read_csv("source/hollys_store_geo_kakao_final.csv")
+df_store = df_store.dropna(subset=["위도", "경도"])
+
+cluster = MarkerCluster(name="할리스 매장").add_to(m)
+for _, row in df_store.iterrows():
+    folium.CircleMarker(
+        location=[row["위도"], row["경도"]],
+        radius=3,
+        popup=row["매장명"],
+        color="#8B4513",
+        fill=True,
+        fill_opacity=0.8,
+    ).add_to(cluster)
+
+folium.LayerControl().add_to(m)
+
+m.save("output/hollys_density_map.html")
+print("저장 완료: output/hollys_density_map.html")
